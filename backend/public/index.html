@@ -35,7 +35,8 @@
         socket.on("receiveMessage", (data) => {
             const chatBox = document.getElementById("chatBox");
             const messageElement = document.createElement("div");
-            messageElement.classList.add("p-2", "rounded-lg", "max-w-xs", "text-white", "relative", "flex", "justify-between");
+            messageElement.classList.add("p-2", "rounded-lg", "max-w-[75%]", "text-white", "break-words", "inline-block");
+
             
             if (data.sender === username) {
                 messageElement.classList.add("bg-green-500", "self-end", "ml-auto");
