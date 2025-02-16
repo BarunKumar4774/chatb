@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat App</title>
+    <script src="https://cdn.jsdelivr.net/npm/socket.io-client@4.5.0/dist/socket.io.js"></script>
+    <script defer src="script.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="flex justify-center items-center h-screen bg-gray-200">
+
+    <div class="w-96 bg-white shadow-lg rounded-lg">
+        <div class="bg-green-600 text-white p-4 text-center font-bold">Chat</div>
+        <div id="chatBox" class="p-4 h-80 overflow-y-auto space-y-2"></div>
+        <div class="p-2 border-t flex">
+            <input type="text" id="messageInput" class="flex-1 border rounded-lg p-2" placeholder="Type a message...">
+            <button id="sendButton" class="ml-2 px-4 py-2 bg-green-500 text-white rounded-lg">Send</button>
+        </div>
+    </div>
+
+    <script>
+
+const socket = io("http://localhost:5000");
+
+// Send message on button click
+document.getElementById("sendButton").addEventListener("click", () => {
+    const messageInput = document.getElementById("messageInput");
+    const message = messageInput.value.trim();
+    
+    if (message !== "") {
+        socket.emit("sendMessage", { sender: "User1", message });
+        messageInput.value = ""; // Clear input
+    }
+});
+
+// Listen for messages and display them
+socket.on("receiveMessage", (data) => {
+    console.log("Message received:", data);
+
+    const chatBox = document.getElementById("chatBox");
+    const messageElement = document.createElement("div");
+    messageElement.classList.add("p-2", "rounded-lg", "max-w-xs", "text-white");
+    
+    if (data.sender === "User1") {
+        messageElement.classList.add("bg-green-500", "self-end", "ml-auto");
+    } else {
+        messageElement.classList.add("bg-gray-500");
+    }
+
+    messageElement.innerHTML = `<strong>${data.sender}:</strong> ${data.message}`;
+    chatBox.appendChild(messageElement);
+    chatBox.scrollTop = chatBox.scrollHeight;
+});
+
+    </script>
+</body>
+</html>
+
