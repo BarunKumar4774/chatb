@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chat App</title>
     <script src="https://cdn.jsdelivr.net/npm/socket.io-client@4.5.0/dist/socket.io.js"></script>
-    <script defer src="script.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="flex justify-center items-center h-screen bg-gray-200">
@@ -20,40 +19,74 @@
     </div>
 
     <script>
+        const socket = io("https://chatb-b4id.onrender.com");
+        const username = prompt("Enter your name:") || "Anonymous";
 
-const socket = io("https://chatb-b4id.onrender.com");
+        document.getElementById("sendButton").addEventListener("click", () => {
+            const messageInput = document.getElementById("messageInput");
+            const message = messageInput.value.trim();
+            
+            if (message !== "") {
+                const messageId = Date.now(); // Generate unique ID
+                socket.emit("sendMessage", { id: messageId, sender: username, message });
+                messageInput.value = "";
+            }
+        });
 
+        socket.on("receiveMessage", (data) => {
+            const chatBox = document.getElementById("chatBox");
+            const messageElement = document.createElement("div");
+            messageElement.classList.add("p-2", "rounded-lg", "max-w-[75%]", "text-white", "break-words", "inline-block");
+            messageElement.id = `msg-${data.id}`;
 
-// Send message on button click
-document.getElementById("sendButton").addEventListener("click", () => {
-    const messageInput = document.getElementById("messageInput");
-    const message = messageInput.value.trim();
-    
-    if (message !== "") {
-        socket.emit("sendMessage", { sender: "User1", message });
-        messageInput.value = ""; // Clear input
-    }
-});
+            if (data.sender === username) {
+                messageElement.classList.add("bg-green-500", "self-end", "ml-auto");
+            } else {
+                messageElement.classList.add("bg-gray-500");
+            }
+            
+            messageElement.innerHTML = `
+                <span><strong>${data.sender}:</strong> <span class="message-text">${data.message}</span></span>
+                ${data.sender === username ? ` 
+                <button class="edit-btn text-sm text-white ml-2" data-id="${data.id}">✏️</button>
+                <button class="delete-btn text-sm text-white ml-1" data-id="${data.id}">❌</button>` : ""}
+            `;
 
-// Listen for messages and display them
-socket.on("receiveMessage", (data) => {
-    console.log("Message received:", data);
+            chatBox.appendChild(messageElement);
+            chatBox.scrollTop = chatBox.scrollHeight;
 
-    const chatBox = document.getElementById("chatBox");
-    const messageElement = document.createElement("div");
-    messageElement.classList.add("p-2", "rounded-lg", "max-w-xs", "text-white");
-    
-    if (data.sender === "User1") {
-        messageElement.classList.add("bg-green-500", "self-end", "ml-auto");
-    } else {
-        messageElement.classList.add("bg-gray-500");
-    }
+            if (data.sender === username) {
+                messageElement.querySelector(".edit-btn").addEventListener("click", (event) => {
+                    const messageId = event.target.dataset.id;
+                    const messageText = messageElement.querySelector(".message-text").innerText;
+                    const newText = prompt("Edit your message:", messageText);
+                    if (newText !== null && newText.trim() !== "") {
+                        socket.emit("editMessage", { id: messageId, newMessage: newText });
+                    }
+                });
 
-    messageElement.innerHTML = `<strong>${data.sender}:</strong> ${data.message}`;
-    chatBox.appendChild(messageElement);
-    chatBox.scrollTop = chatBox.scrollHeight;
-});
+                messageElement.querySelector(".delete-btn").addEventListener("click", (event) => {
+                    const messageId = event.target.dataset.id;
+                    socket.emit("deleteMessage", messageId); // No alert, direct delete
+                });
+            }
+        });
 
+        // Update message when edited
+        socket.on("messageEdited", (data) => {
+            const messageElement = document.getElementById(`msg-${data.id}`);
+            if (messageElement) {
+                messageElement.querySelector(".message-text").innerText = data.newMessage;
+            }
+        });
+
+        // Remove message when deleted
+        socket.on("messageDeleted", (messageId) => {
+            const messageElement = document.getElementById(`msg-${messageId}`);
+            if (messageElement) {
+                messageElement.remove();
+            }
+        });
     </script>
 </body>
 </html>

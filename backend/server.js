@@ -4,6 +4,7 @@ const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const cors = require("cors");
+const { v4: uuidv4 } = require("uuid"); // Generate unique IDs
 
 const app = express();
 
@@ -28,16 +29,39 @@ const io = new Server(server, {
     }
 });
 
-io.on("connection", (socket) => {
-    console.log("New client connected:", socket.id);
+let messages = []; // Store messages in memory (replace with DB for persistence)
 
+io.on("connection", (socket) => {
+    console.log(`🟢 New client connected: ${socket.id}`);
+
+    // Send previous messages to the new client
+    socket.emit("loadMessages", messages);
+
+    // Handle new messages
     socket.on("sendMessage", (data) => {
-        console.log("Message received:", data);
-        io.emit("receiveMessage", data);
+        if (!data.message.trim()) return; // Ignore empty messages
+
+        const messageData = { id: uuidv4(), ...data };
+        messages.push(messageData);
+        io.emit("receiveMessage", messageData);
+    });
+
+    // Handle message editing
+    socket.on("editMessage", ({ id, newMessage }) => {
+        messages = messages.map(msg => 
+            msg.id === id ? { ...msg, message: newMessage } : msg
+        );
+        io.emit("messageEdited", { id, newMessage });
+    });
+
+    // Handle message deletion
+    socket.on("deleteMessage", (id) => {
+        messages = messages.filter(msg => msg.id !== id);
+        io.emit("messageDeleted", id);
     });
 
     socket.on("disconnect", () => {
-        console.log("Client disconnected:", socket.id);
+        console.log(`🔴 Client disconnected: ${socket.id}`);
     });
 });
 
