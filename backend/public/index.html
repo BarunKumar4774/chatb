@@ -9,6 +9,7 @@
 </head>
 <body class="flex justify-center items-center h-screen bg-gray-200">
 
+    <!-- Authentication Box -->
     <div id="authBox" class="w-80 bg-white shadow-lg rounded-lg p-4 text-center">
         <h2 class="text-xl font-bold mb-4">Enter Secret Code</h2>
         <input type="password" id="secretCodeInput" class="w-full border p-2 rounded-lg mb-4" placeholder="Secret Code">
@@ -16,6 +17,7 @@
         <p id="errorMsg" class="text-red-500 mt-2 hidden">Incorrect code!</p>
     </div>
 
+    <!-- Chat Container -->
     <div id="chatContainer" class="hidden w-96 bg-white shadow-lg rounded-lg">
         <div class="bg-green-600 text-white p-4 text-center font-bold rounded-t-lg">Chat</div>
         <div id="chatBox" class="p-4 h-80 overflow-y-auto flex flex-col space-y-2"></div>
@@ -27,8 +29,12 @@
     </div>
 
     <script>
-        const socket = io("http://localhost:5000"); // Change URL if needed
-        const SECRET_CODE = "1234";
+        // ✅ Change WebSocket URL if deployed (use Render or another host)
+        const socket = io("https://your-backend-url.onrender.com", {
+            transports: ["websocket", "polling"]
+        });
+
+        const SECRET_CODE = "1234"; // Change this if needed
         let username;
 
         document.getElementById("submitCode").addEventListener("click", authenticateUser);
@@ -47,8 +53,15 @@
 
         function initializeChat() {
             const messageInput = document.getElementById("messageInput");
+            const chatBox = document.getElementById("chatBox");
             const typingIndicator = document.getElementById("typingIndicator");
             let typingTimeout;
+
+            // ✅ Load previous messages when joining
+            socket.on("loadMessages", (messages) => {
+                chatBox.innerHTML = ""; // Clear previous messages
+                messages.forEach(data => appendMessage(data));
+            });
 
             messageInput.addEventListener("input", () => {
                 socket.emit("typing", username);
@@ -72,10 +85,10 @@
                 }
             }
 
-            socket.on("receiveMessage", (data) => {
-                const chatBox = document.getElementById("chatBox");
-                const messageElement = document.createElement("div");
+            socket.on("receiveMessage", (data) => appendMessage(data));
 
+            function appendMessage(data) {
+                const messageElement = document.createElement("div");
                 messageElement.classList.add(
                     "p-2", "rounded-lg", "max-w-[75%]", "text-white", "break-words"
                 );
@@ -87,20 +100,36 @@
                 }
 
                 messageElement.innerHTML = `<strong>${data.sender}:</strong> <span>${data.message}</span>`;
-
                 chatBox.appendChild(messageElement);
                 chatBox.scrollTop = chatBox.scrollHeight;
+            }
+
+            // ✅ Show typing for multiple users
+            socket.on("userTyping", (users) => {
+                if (users.length > 0) {
+                    typingIndicator.innerText = `${users.join(", ")} is typing...`;
+                    typingIndicator.classList.remove("hidden");
+                } else {
+                    typingIndicator.classList.add("hidden");
+                }
             });
 
-            socket.on("displayTyping", (user) => {
-                typingIndicator.innerText = `${user} is typing...`;
-                typingIndicator.classList.remove("hidden");
-                setTimeout(() => {
-                    typingIndicator.classList.add("hidden");
-                }, 1000);
+            socket.on("messageDeleted", (id) => {
+                document.querySelectorAll(`#chatBox div`).forEach((messageDiv) => {
+                    if (messageDiv.dataset.id === id) {
+                        messageDiv.remove();
+                    }
+                });
+            });
+
+            socket.on("messageEdited", ({ id, newMessage }) => {
+                document.querySelectorAll(`#chatBox div`).forEach((messageDiv) => {
+                    if (messageDiv.dataset.id === id) {
+                        messageDiv.querySelector("span").innerText = newMessage;
+                    }
+                });
             });
         }
     </script>
 </body>
 </html>
-

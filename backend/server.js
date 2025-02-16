@@ -11,9 +11,9 @@ const app = express();
 // Serve static files
 app.use(express.static("public"));
 
-// Enable CORS
+// Enable CORS with specific frontend URL (change to your frontend domain)
 app.use(cors({
-    origin: "*",
+    origin: "*",  // Change "*" to "https://your-frontend-url.com" for security
     methods: ["GET", "POST"],
     allowedHeaders: ["Content-Type"]
 }));
@@ -22,15 +22,16 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
     cors: {
-        origin: "*",
+        origin: "*", // Change "*" to your frontend domain if needed
         methods: ["GET", "POST"],
         allowedHeaders: ["Content-Type"],
         credentials: true
-    }
+    },
+    transports: ["websocket", "polling"] // Ensure WebSocket connection stability
 });
 
-let messages = []; // Store messages in memory (replace with DB for persistence)
-let typingUsers = new Set(); // Track users who are typing
+let messages = []; // Store messages in memory (use DB for persistence)
+let typingUsers = new Map(); // Track users who are typing (Map for better management)
 
 io.on("connection", (socket) => {
     console.log(`🟢 New client connected: ${socket.id}`);
@@ -38,31 +39,17 @@ io.on("connection", (socket) => {
     // Send previous messages to the new client
     socket.emit("loadMessages", messages);
 
-    // Handle typing events
-    socket.on("typing", (username) => {
-        if (!typingUsers.has(username)) {
-            typingUsers.add(username);
-            io.emit("userTyping", Array.from(typingUsers)); // Broadcast updated list
-        }
-    });
-
-    // Handle stop typing event
-    socket.on("stopTyping", (username) => {
-        typingUsers.delete(username);
-        io.emit("userTyping", Array.from(typingUsers)); // Update all clients
-    });
-
     // Handle new messages
     socket.on("sendMessage", (data) => {
         if (!data.message.trim()) return; // Ignore empty messages
 
-        const messageData = { id: uuidv4(), ...data };
+        const messageData = { id: uuidv4(), sender: data.sender, message: data.message };
         messages.push(messageData);
         io.emit("receiveMessage", messageData);
 
         // Ensure user is removed from typing list after sending
-        typingUsers.delete(data.sender);
-        io.emit("userTyping", Array.from(typingUsers));
+        typingUsers.delete(socket.id);
+        io.emit("userTyping", Array.from(typingUsers.values())); // Send updated typing list
     });
 
     // Handle message editing
@@ -79,16 +66,26 @@ io.on("connection", (socket) => {
         io.emit("messageDeleted", id);
     });
 
+    // Handle typing events
+    socket.on("typing", (username) => {
+        if (!typingUsers.has(socket.id)) {
+            typingUsers.set(socket.id, username);
+            io.emit("userTyping", Array.from(typingUsers.values())); // Send updated typing list
+        }
+    });
+
+    // Handle stop typing event
+    socket.on("stopTyping", () => {
+        typingUsers.delete(socket.id);
+        io.emit("userTyping", Array.from(typingUsers.values())); // Send updated typing list
+    });
+
     socket.on("disconnect", () => {
         console.log(`🔴 Client disconnected: ${socket.id}`);
 
         // Remove user from typing list on disconnect
-        typingUsers.forEach((user) => {
-            if (user.socketId === socket.id) {
-                typingUsers.delete(user);
-            }
-        });
-        io.emit("userTyping", Array.from(typingUsers)); // Update clients
+        typingUsers.delete(socket.id);
+        io.emit("userTyping", Array.from(typingUsers.values())); // Update clients
     });
 });
 
