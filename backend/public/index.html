@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chat App</title>
     <script src="https://cdn.jsdelivr.net/npm/socket.io-client@4.5.0/dist/socket.io.js"></script>
-    <script defer src="script.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="flex justify-center items-center h-screen bg-gray-200">
@@ -20,41 +19,40 @@
     </div>
 
     <script>
+        const socket = io("https://chatb-b4id.onrender.com");
 
-const socket = io("https://chatb-b4id.onrender.com");
+        // Prompt user for their name
+        const username = prompt("Enter your name:") || "Anonymous";
 
+        // Send message on button click
+        document.getElementById("sendButton").addEventListener("click", () => {
+            const messageInput = document.getElementById("messageInput");
+            const message = messageInput.value.trim();
+            
+            if (message !== "") {
+                socket.emit("sendMessage", { sender: username, message });
+                messageInput.value = ""; // Clear input
+            }
+        });
 
-// Send message on button click
-document.getElementById("sendButton").addEventListener("click", () => {
-    const messageInput = document.getElementById("messageInput");
-    const message = messageInput.value.trim();
-    
-    if (message !== "") {
-        socket.emit("sendMessage", { sender: "User1", message });
-        messageInput.value = ""; // Clear input
-    }
-});
+        // Listen for messages and display them
+        socket.on("receiveMessage", (data) => {
+            console.log("Message received:", data);
 
-// Listen for messages and display them
-socket.on("receiveMessage", (data) => {
-    console.log("Message received:", data);
+            const chatBox = document.getElementById("chatBox");
+            const messageElement = document.createElement("div");
+            messageElement.classList.add("p-2", "rounded-lg", "max-w-xs", "text-white");
+            
+            if (data.sender === username) {
+                messageElement.classList.add("bg-green-500", "self-end", "ml-auto");
+            } else {
+                messageElement.classList.add("bg-gray-500");
+            }
 
-    const chatBox = document.getElementById("chatBox");
-    const messageElement = document.createElement("div");
-    messageElement.classList.add("p-2", "rounded-lg", "max-w-xs", "text-white");
-    
-    if (data.sender === "User1") {
-        messageElement.classList.add("bg-green-500", "self-end", "ml-auto");
-    } else {
-        messageElement.classList.add("bg-gray-500");
-    }
-
-    messageElement.innerHTML = `<strong>${data.sender}:</strong> ${data.message}`;
-    chatBox.appendChild(messageElement);
-    chatBox.scrollTop = chatBox.scrollHeight;
-});
-
+            messageElement.innerHTML = `<strong>${data.sender}:</strong> ${data.message}`;
+            chatBox.appendChild(messageElement);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        });
     </script>
 </body>
 </html>
-
