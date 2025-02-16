@@ -9,9 +9,17 @@
 </head>
 <body class="flex justify-center items-center h-screen bg-gray-200">
 
-    <div class="w-96 bg-white shadow-lg rounded-lg">
-        <div class="bg-green-600 text-white p-4 text-center font-bold">Chat</div>
-        <div id="chatBox" class="p-4 h-80 overflow-y-auto space-y-2"></div>
+    <div id="authBox" class="w-80 bg-white shadow-lg rounded-lg p-4 text-center">
+        <h2 class="text-xl font-bold mb-4">Enter Secret Code</h2>
+        <input type="password" id="secretCodeInput" class="w-full border p-2 rounded-lg mb-4" placeholder="Secret Code">
+        <button id="submitCode" class="px-4 py-2 bg-green-500 text-white rounded-lg">Enter</button>
+        <p id="errorMsg" class="text-red-500 mt-2 hidden">Incorrect code!</p>
+    </div>
+
+    <div id="chatContainer" class="hidden w-96 bg-white shadow-lg rounded-lg">
+        <div class="bg-green-600 text-white p-4 text-center font-bold rounded-t-lg">Chat</div>
+        <div id="chatBox" class="p-4 h-80 overflow-y-auto flex flex-col space-y-2"></div>
+        <p id="typingIndicator" class="text-gray-500 text-sm px-4 hidden"></p>
         <div class="p-2 border-t flex">
             <input type="text" id="messageInput" class="flex-1 border rounded-lg p-2" placeholder="Type a message...">
             <button id="sendButton" class="ml-2 px-4 py-2 bg-green-500 text-white rounded-lg">Send</button>
@@ -19,74 +27,80 @@
     </div>
 
     <script>
-        const socket = io("https://chatb-b4id.onrender.com");
-        const username = prompt("Enter your name:") || "Anonymous";
+        const socket = io("http://localhost:5000"); // Change URL if needed
+        const SECRET_CODE = "1234";
+        let username;
 
-        document.getElementById("sendButton").addEventListener("click", () => {
-            const messageInput = document.getElementById("messageInput");
-            const message = messageInput.value.trim();
-            
-            if (message !== "") {
-                const messageId = Date.now(); // Generate unique ID
-                socket.emit("sendMessage", { id: messageId, sender: username, message });
-                messageInput.value = "";
-            }
-        });
+        document.getElementById("submitCode").addEventListener("click", authenticateUser);
 
-        socket.on("receiveMessage", (data) => {
-            const chatBox = document.getElementById("chatBox");
-            const messageElement = document.createElement("div");
-            messageElement.classList.add("p-2", "rounded-lg", "max-w-[75%]", "text-white", "break-words", "inline-block");
-            messageElement.id = `msg-${data.id}`;
-
-            if (data.sender === username) {
-                messageElement.classList.add("bg-green-500", "self-end", "ml-auto");
+        function authenticateUser() {
+            const enteredCode = document.getElementById("secretCodeInput").value;
+            if (enteredCode === SECRET_CODE) {
+                document.getElementById("authBox").classList.add("hidden");
+                document.getElementById("chatContainer").classList.remove("hidden");
+                username = prompt("Enter your name:") || "Anonymous";
+                initializeChat();
             } else {
-                messageElement.classList.add("bg-gray-500");
+                document.getElementById("errorMsg").classList.remove("hidden");
             }
-            
-            messageElement.innerHTML = `
-                <span><strong>${data.sender}:</strong> <span class="message-text">${data.message}</span></span>
-                ${data.sender === username ? ` 
-                <button class="edit-btn text-sm text-white ml-2" data-id="${data.id}">✏️</button>
-                <button class="delete-btn text-sm text-white ml-1" data-id="${data.id}">❌</button>` : ""}
-            `;
+        }
 
-            chatBox.appendChild(messageElement);
-            chatBox.scrollTop = chatBox.scrollHeight;
+        function initializeChat() {
+            const messageInput = document.getElementById("messageInput");
+            const typingIndicator = document.getElementById("typingIndicator");
+            let typingTimeout;
 
-            if (data.sender === username) {
-                messageElement.querySelector(".edit-btn").addEventListener("click", (event) => {
-                    const messageId = event.target.dataset.id;
-                    const messageText = messageElement.querySelector(".message-text").innerText;
-                    const newText = prompt("Edit your message:", messageText);
-                    if (newText !== null && newText.trim() !== "") {
-                        socket.emit("editMessage", { id: messageId, newMessage: newText });
-                    }
-                });
+            messageInput.addEventListener("input", () => {
+                socket.emit("typing", username);
+                clearTimeout(typingTimeout);
+                typingTimeout = setTimeout(() => {
+                    socket.emit("stopTyping");
+                }, 1000);
+            });
 
-                messageElement.querySelector(".delete-btn").addEventListener("click", (event) => {
-                    const messageId = event.target.dataset.id;
-                    socket.emit("deleteMessage", messageId); // No alert, direct delete
-                });
+            document.getElementById("sendButton").addEventListener("click", sendMessage);
+            messageInput.addEventListener("keypress", (event) => {
+                if (event.key === "Enter") sendMessage();
+            });
+
+            function sendMessage() {
+                const message = messageInput.value.trim();
+                if (message !== "") {
+                    socket.emit("sendMessage", { sender: username, message });
+                    messageInput.value = "";
+                    socket.emit("stopTyping");
+                }
             }
-        });
 
-        // Update message when edited
-        socket.on("messageEdited", (data) => {
-            const messageElement = document.getElementById(`msg-${data.id}`);
-            if (messageElement) {
-                messageElement.querySelector(".message-text").innerText = data.newMessage;
-            }
-        });
+            socket.on("receiveMessage", (data) => {
+                const chatBox = document.getElementById("chatBox");
+                const messageElement = document.createElement("div");
 
-        // Remove message when deleted
-        socket.on("messageDeleted", (messageId) => {
-            const messageElement = document.getElementById(`msg-${messageId}`);
-            if (messageElement) {
-                messageElement.remove();
-            }
-        });
+                messageElement.classList.add(
+                    "p-2", "rounded-lg", "max-w-[75%]", "text-white", "break-words"
+                );
+
+                if (data.sender === username) {
+                    messageElement.classList.add("bg-green-500", "self-end");
+                } else {
+                    messageElement.classList.add("bg-gray-500", "self-start");
+                }
+
+                messageElement.innerHTML = `<strong>${data.sender}:</strong> <span>${data.message}</span>`;
+
+                chatBox.appendChild(messageElement);
+                chatBox.scrollTop = chatBox.scrollHeight;
+            });
+
+            socket.on("displayTyping", (user) => {
+                typingIndicator.innerText = `${user} is typing...`;
+                typingIndicator.classList.remove("hidden");
+                setTimeout(() => {
+                    typingIndicator.classList.add("hidden");
+                }, 1000);
+            });
+        }
     </script>
 </body>
 </html>
+

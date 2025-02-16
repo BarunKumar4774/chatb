@@ -30,12 +30,27 @@ const io = new Server(server, {
 });
 
 let messages = []; // Store messages in memory (replace with DB for persistence)
+let typingUsers = new Set(); // Track users who are typing
 
 io.on("connection", (socket) => {
     console.log(`🟢 New client connected: ${socket.id}`);
 
     // Send previous messages to the new client
     socket.emit("loadMessages", messages);
+
+    // Handle typing events
+    socket.on("typing", (username) => {
+        if (!typingUsers.has(username)) {
+            typingUsers.add(username);
+            io.emit("userTyping", Array.from(typingUsers)); // Broadcast updated list
+        }
+    });
+
+    // Handle stop typing event
+    socket.on("stopTyping", (username) => {
+        typingUsers.delete(username);
+        io.emit("userTyping", Array.from(typingUsers)); // Update all clients
+    });
 
     // Handle new messages
     socket.on("sendMessage", (data) => {
@@ -44,6 +59,10 @@ io.on("connection", (socket) => {
         const messageData = { id: uuidv4(), ...data };
         messages.push(messageData);
         io.emit("receiveMessage", messageData);
+
+        // Ensure user is removed from typing list after sending
+        typingUsers.delete(data.sender);
+        io.emit("userTyping", Array.from(typingUsers));
     });
 
     // Handle message editing
@@ -62,6 +81,14 @@ io.on("connection", (socket) => {
 
     socket.on("disconnect", () => {
         console.log(`🔴 Client disconnected: ${socket.id}`);
+
+        // Remove user from typing list on disconnect
+        typingUsers.forEach((user) => {
+            if (user.socketId === socket.id) {
+                typingUsers.delete(user);
+            }
+        });
+        io.emit("userTyping", Array.from(typingUsers)); // Update clients
     });
 });
 
