@@ -43,9 +43,14 @@ io.on("connection", (socket) => {
     socket.on("sendMessage", (data) => {
         if (!data.message.trim()) return; // Ignore empty messages
 
-        const messageData = { id: uuidv4(), sender: data.sender, message: data.message };
+        const messageData = { 
+            id: uuidv4(), 
+            sender: data.sender, 
+            message: data.message, 
+            timestamp: new Date().toLocaleString() // Add timestamp to every message
+        };
         messages.push(messageData);
-        io.emit("receiveMessage", messageData);
+        io.emit("receiveMessage", messageData); // Send message with timestamp
 
         // Ensure user is removed from typing list after sending
         typingUsers.delete(socket.id);
@@ -54,10 +59,12 @@ io.on("connection", (socket) => {
 
     // Handle message editing
     socket.on("editMessage", ({ id, newMessage }) => {
-        messages = messages.map(msg => 
-            msg.id === id ? { ...msg, message: newMessage } : msg
-        );
-        io.emit("messageEdited", { id, newMessage });
+        const updatedMessage = messages.find(msg => msg.id === id);
+        if (updatedMessage) {
+            updatedMessage.message = newMessage;
+            updatedMessage.timestamp = new Date().toLocaleString(); // Update timestamp for edited message
+            io.emit("messageEdited", { id, newMessage, timestamp: updatedMessage.timestamp }); // Send updated timestamp
+        }
     });
 
     // Handle message deletion
